@@ -1,0 +1,11 @@
+pandas
+numpy
+pymysql
+scikit-learn
+statsmodels
+scipy
+patsy
+matplotlib
+seaborn
+tensorflow
+torch
