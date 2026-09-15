@@ -1,0 +1,14 @@
+.git
+venv
+.venv
+.env
+node_modules
+media
+.tmp
+staticfiles
+__pycache__
+*.sqlite3
+*.db
+*.ipynb
+*.docx
+*.log

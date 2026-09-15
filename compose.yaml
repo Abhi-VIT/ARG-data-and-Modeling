@@ -1,0 +1,53 @@
+# Local development stack. Bind service ports to loopback only.
+services:
+  db:
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_DB: arg
+      POSTGRES_USER: arg
+      POSTGRES_PASSWORD: arg_local
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arg -d arg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7.4.5-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  web:
+    build: .
+    environment: &application_environment
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      DEBUG: "True"
+      DATABASE_URL: postgres://arg:arg_local@db:5432/arg
+      REDIS_URL: redis://redis:6379/0
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      MEDIA_ROOT: /app/media
+      IMPORT_URL_HOSTS: ${IMPORT_URL_HOSTS:-docs.google.com}
+    command: ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000 --noreload"]
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: ["private_media:/app/media"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  worker:
+    build: .
+    environment: *application_environment
+    command: ["celery", "-A", "project", "worker", "-l", "info", "--concurrency=2"]
+    volumes: ["private_media:/app/media"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+volumes:
+  postgres_data:
+  redis_data:
+  private_media:

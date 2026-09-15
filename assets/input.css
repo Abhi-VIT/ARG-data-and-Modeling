@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body { @apply bg-paper text-slate-800 antialiased; font-family: 'Segoe UI', system-ui, sans-serif; }
+  button, input, select, textarea { font: inherit; }
+  button { @apply transition-colors; }
+  button:disabled { @apply opacity-40 cursor-not-allowed; }
+  input:not([type=checkbox]):not([type=range]), select, textarea { @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100; }
+  input[type=checkbox] { accent-color: #174e3f; @apply h-4 w-4 rounded; }
+  input[type=range] { accent-color: #174e3f; @apply w-full; }
+  label { @apply text-xs font-medium text-slate-600; }
+}
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-slate-50; }
+  .btn-primary { @apply btn border-pine bg-pine text-white hover:bg-emerald-900; }
+  .card { @apply rounded-xl border border-slate-200/80 bg-white; }
+  .eyebrow { @apply text-[10px] font-semibold uppercase tracking-[.16em] text-slate-400; }
+  .field { @apply space-y-1.5; }
+  .nav-item { @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-500; }
+  .nav-item.active { @apply bg-emerald-50 text-pine font-semibold; }
+  .chip { @apply inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-500; }
+  .table-cell { @apply border-b border-r border-slate-100 px-3 py-2.5 text-xs whitespace-nowrap text-left; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .table-cell.selected { @apply bg-emerald-50 outline outline-1 -outline-offset-1 outline-emerald-500; }
+  .skeleton { @apply animate-pulse rounded-md bg-slate-100; }
+}
+[x-cloak] { display: none !important; }
+.data-scroll { max-height: 520px; overflow: auto; scrollbar-width: thin; }
+.data-scroll thead { position: sticky; top: 0; z-index: 10; }
+.data-scroll th { background: #f8faf9; }
+.data-scroll tbody tr:hover { background: #f8fbf9; }
+.data-scroll tbody tr.flagged { background: #fff5df; }
+.htmx-indicator { opacity: 0; }
+.htmx-request .htmx-indicator { opacity: 1; }
+:focus-visible { outline: 2px solid #237a60; outline-offset: 3px; }

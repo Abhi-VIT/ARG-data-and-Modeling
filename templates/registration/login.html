@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Sign in — ARG{% endblock %}
+{% block body %}
+<main class="min-h-screen grid lg:grid-cols-2">
+  <section class="hidden lg:flex flex-col justify-between bg-pine p-16 text-white">
+    <div class="text-xl font-semibold tracking-tight">▧ &nbsp; ARG <span class="text-emerald-200/60 font-normal">/ data studio</span></div>
+    <div><div class="text-xs uppercase tracking-[.25em] text-emerald-200 mb-6">From raw data to ready.</div>
+      <h1 class="text-5xl font-semibold leading-tight max-w-lg">Good analysis starts<br>with better data.</h1>
+      <p class="mt-6 max-w-md text-emerald-100/70 leading-relaxed">Explore the details. Clean with confidence. Keep every step in a recipe you can use again.</p>
+      <div class="mt-12 grid grid-cols-7 gap-2 opacity-70" aria-hidden="true">{% for i in '1234567890123456789012345678' %}<div class="h-10 rounded border border-emerald-300/20 bg-emerald-100/10"></div>{% endfor %}</div>
+    </div><div class="text-sm text-emerald-200/60">Your data. Your workspace.</div>
+  </section>
+  <section class="flex items-center justify-center p-8"><div class="w-full max-w-sm">
+    <p class="eyebrow mb-4">ARG / DATA STUDIO</p><h2 class="text-3xl font-semibold tracking-tight">Welcome back</h2>
+    <p class="mt-2 mb-8 text-sm text-slate-500">Sign in to continue working with your data.</p>
+    <form method="post" class="space-y-5">{% csrf_token %}
+      {% if form.errors %}<p role="alert" class="text-sm text-red-700">The username or password is incorrect. Please try again.</p>{% endif %}
+      <div class="field"><label for="id_username">Username</label>{{ form.username }}</div>
+      <div class="field"><label for="id_password">Password</label>{{ form.password }}</div>
+      <input type="hidden" name="next" value="{{ next }}"><button class="btn-primary w-full" type="submit">Sign in →</button>
+    </form><p class="mt-6 text-sm text-slate-500">New here? <a class="text-pine font-semibold" href="{% url 'register' %}">Create an account</a></p>
+  </div></section>
+</main>
+{% endblock %}

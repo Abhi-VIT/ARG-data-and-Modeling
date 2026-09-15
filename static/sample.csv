@@ -1,0 +1,21 @@
+sample_id,location,season,concentration,temperature,water_type
+ARG-001, River North ,Summer,12.5,27.2,Surface
+ARG-002,River South,Summer,18.3,28.1,Surface
+ARG-003,Well East,Winter,,19.6,Ground
+ARG-004,Well West,Winter,8.2,,Ground
+ARG-005,River North,Monsoon,32.1,25.4,Surface
+ARG-006,River South,Monsoon,28.7,26.3,Surface
+ARG-007,Well East,Summer,14.2,24.5,Ground
+ARG-008,Well West,Summer,11.8,25.1,Ground
+ARG-009,River North,Winter,9.6,20.3,Surface
+ARG-010,River South,Winter,10.1,21.2,Surface
+ARG-011,Well East,Monsoon,18.4,23.8,Ground
+ARG-012,Well West,Monsoon,17.2,24.2,Ground
+ARG-013,River North,Summer,250.0,27.8,Surface
+ARG-014,River South,Summer,,28.6,Surface
+ARG-015,Well East,Winter,7.9,18.5,Ground
+ARG-016,Well West,Winter,8.5,19.1,Ground
+ARG-017,River North,Monsoon,30.6,25.9,Surface
+ARG-018,River South,Monsoon,27.8,,Surface
+ARG-018,River South,Monsoon,27.8,,Surface
+ARG-020,Well West,Summer,12.3,24.9,Ground
