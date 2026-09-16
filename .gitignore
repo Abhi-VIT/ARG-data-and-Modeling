@@ -9,6 +9,8 @@ __pycache__/
 *.sqlite3-*
 *.db
 media/
+# Public documentation screenshots and animations belong in Git.
+!docs/media/
 staticfiles/
 node_modules/
 .tmp/

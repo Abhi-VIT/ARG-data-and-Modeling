@@ -316,7 +316,7 @@ Column names are normalized to strings and must be nonempty, unique, at most 200
 | Remove duplicate rows | Keeps the first occurrence and removes subsequent duplicate rows within the selected row scope. |
 | Detect outliers → IQR | Flags a row if any selected numeric column is below Q1 − k×IQR or above Q3 + k×IQR. Default k=1.5; permitted 0.1–10. |
 | Detect outliers → Z-score | Flags absolute population-standardized deviations above a threshold. Default 3; permitted 0.1–20. Constant columns do not produce a finite deviation score. |
-| Detect outliers → Isolation forest | Seeded anomaly detector with median-filled numeric inputs and contamination 0.001–0.5; default 0.05. Needs variation/nonempty inputs and at least two rows; capped at 100,000 rows. |
+| Detect outliers → Isolation forest | Seeded anomaly detector with median-filled numeric inputs and contamination 0.001–0.5; default 0.05. Needs nonempty numeric input columns and at least two rows; capped at 100,000 rows. |
 | Remove flagged rows | Uses the reviewed outlier detection operation for the current revision and writes a new snapshot. An unusual observation is a candidate for review, not automatic evidence of an error. |
 
 ### Types, text, encoding and scaling
@@ -363,7 +363,7 @@ The Dataset's cursor selects a Revision. Undo and Redo move this cursor to an ex
 
 **Export recipe** downloads applied operations and the original ordered column schema. **Replay recipe** checks that the incoming dataset matches that schema, then applies each saved operation. A recipe is a list of transformations, not a fitted preprocessing model: medians, target means and scales are recomputed on the new dataset. Cell/row references replay the same positions. Review positional edits before replaying on differently ordered data.
 
-Recipe replay commits the completed sequence atomically at the metadata level: a failed step does not advance the active revision into a partially applied recipe. Intermediate private files can remain for later cleanup. Import options are provenance; the recipe applies cleaning steps to the already-imported matching dataset.
+Recipes must contain 1–100 operations. Recipe replay commits the completed sequence atomically at the metadata level: a failed step does not advance the active revision into a partially applied recipe. Intermediate private files can remain for later cleanup. Import options are provenance; the recipe applies cleaning steps to the already-imported matching dataset.
 
 ### Choose an export
 
@@ -382,7 +382,7 @@ Recipe replay commits the completed sequence atomically at the metadata level: a
 
 Export jobs use the **entire active revision**, not just the currently filtered preview. Clearing a dataset disconnects the active association; it does not purge private stored files or reports.
 
-### Phase 2 analysis guide
+## Phase 2 analysis guide
 
 ![Animated statistical report tour showing correlation and regression diagnostics](docs/media/statistics.gif)
 
@@ -394,7 +394,7 @@ Export jobs use the **entire active revision**, not just the currently filtered 
 - **ANOVA:** ordinary one/two-way models assume independent groups and equal variances. Two-way includes interaction and uses type II sums of squares. Welch permits unequal variances. Repeated measures accepts one within-subject factor in long format, requires one observation per subject/condition, and excludes incomplete subjects. Reports show [sphericity and Greenhouse–Geisser correction](https://pingouin-stats.org/generated/pingouin.rm_anova.html). Tukey is available for ordinary ANOVA only; two-way Tukey pools the other factor and is not a simple-effects test.
 - **Plots:** histogram, box, violin, scatter, pair, Pearson heatmap, categorical counts, and line charts. Line charts sort by X. Regression includes residuals vs fitted, normal Q–Q, scale–location, Cook’s distance, and residuals vs leverage. Large point/distribution plots are sampled and explicitly labeled; statistical tables use all applicable observations.
 
-#### Correlation methods explained
+### Correlation methods explained
 
 | Method | Compatible input | What the coefficient describes |
 | --- | --- | --- |
@@ -408,11 +408,11 @@ Export jobs use the **entire active revision**, not just the currently filtered 
 
 Reports include coefficients, p-values, paired observation counts and method notes. Constant columns or insufficient paired rows produce unavailable entries with explanations. Different pairs may use different complete rows. Correlation does not establish causation; small expected contingency counts can make asymptotic p-values unreliable.
 
-#### Descriptive summaries and EDA
+### Descriptive summaries and EDA
 
 Descriptive reports summarize selected columns and missingness before formal modeling. EDA provides histogram, box, violin, scatter, pair plot, Pearson heatmap, categorical count and line charts. Choose plots according to the question: distributions for spread/skew, scatter for a pair's relationship, counts for category frequencies and ordered line plots for a progression. Plot sampling is a display limit; notes identify it, and statistics use their documented analysis rows.
 
-#### Regression outputs and assumption checks
+### Regression outputs and assumption checks
 
 | Output / diagnostic | Interpretation |
 | --- | --- |
@@ -429,7 +429,7 @@ Descriptive reports summarize selected columns and missingness before formal mod
 
 Custom regression permits selected interactions and degree-2/3 polynomial terms. The implementation constructs formulas from internal safe names. Forward, backward or bidirectional stepwise selection uses AIC, BIC or nested F-tests; reported inference does not adjust for the selection process. Near-perfect fits can make residual diagnostics meaningless, and reports explain unavailable values instead of turning them into zero.
 
-#### ANOVA choices
+### ANOVA choices
 
 | Choice | Data layout | Main distinction |
 | --- | --- | --- |
@@ -441,7 +441,7 @@ Custom regression permits selected interactions and degree-2/3 polynomial terms.
 
 Read effect estimates and assumptions alongside p-values. Repeating many tests creates additional false-positive opportunities; the correlation p-values and exploratory analyses are not a universal multiple-testing correction system.
 
-### Phase 3 modeling guide
+## Phase 3 modeling guide
 
 ![Animated modeling walkthrough from model controls to a saved regression report and binary threshold exploration](docs/media/modeling.gif)
 
@@ -463,11 +463,11 @@ Read effect estimates and assumptions alongside p-values. Repeating many tests c
 
 Model artifacts are created by this server and scoped to their owner. The server never accepts uploaded pickle/joblib files. Only load trusted downloaded model bundles, using the recorded package versions: [pickle-based persistence can execute code when loaded](https://scikit-learn.org/stable/model_persistence.html).
 
-#### Understanding the model families
+### Understanding the model families
 
 | Family | What it learns / useful distinction |
 | --- | --- |
-| Linear / polynomial regression | A linear combination of features; polynomial regression expands selected numeric relationships before fitting. |
+| Linear / polynomial regression | A linear combination of features; polynomial regression expands the preprocessed feature terms before fitting. |
 | Ridge / Lasso / ElasticNet | Regularized linear models. Ridge shrinks coefficients, Lasso can shrink some to zero, ElasticNet combines the penalties. |
 | SVR / SVM | Margin-based regression/classification with configurable kernels; row caps reflect their computational cost. |
 | Decision tree | A sequence of feature-based splits; depth and minimum leaf sizes constrain complexity. |
@@ -484,7 +484,7 @@ Model artifacts are created by this server and scoped to their owner. The server
 
 The exact **28 model keys, defaults, allowed values and ranges** are listed in the [complete generated model parameter reference](docs/model-parameters.md). This reference is generated directly from the same catalog that renders the model controls.
 
-#### Training and evaluation sequence
+### Training and evaluation sequence
 
 ```mermaid
 flowchart LR
@@ -501,7 +501,7 @@ The supervised test fraction defaults to 0.20 and can be 0.10–0.50. Classifica
 
 Search uses JSON candidate arrays, for example `alpha: [0.1, 1, 10]`. Grid search evaluates every allowed combination; random search samples a bounded number with the selected seed. The report lists candidate scores and failures. Neither approach searches arbitrary Python parameters outside the whitelisted controls.
 
-#### Metrics and classification cutoff
+### Metrics and classification cutoff
 
 | Metric | Meaning |
 | --- | --- |
@@ -537,7 +537,7 @@ result.to_csv("predictions.csv", index=False)
 
 Recipes describe transformations, not fitted ML preprocessors: statistics, encodings, and scaler parameters are recomputed on the new dataset. Explicit cell/row selections replay the same positions. Target encoding uses the entire supplied dataset's target means; fit it only on training data to avoid leakage in later modeling.
 
-### Phase 4 deep-learning guide
+## Phase 4 deep-learning guide
 
 ![Animated neural workflow showing configuration, live epoch curves, and saved training results](docs/media/deep-learning.gif)
 
@@ -578,7 +578,7 @@ predictions = standardized * pre["target_scaler"]["scale"] + pre["target_scaler"
 
 For classification, apply softmax to logits and map indices with `pre["classes"]`. Sequence inputs have shape `[batch, window_length, features]`; CNN inputs have shape `[batch, 3, 64, 64]` scaled to `[0,1]`, using the same crop/resize process. Autoencoders reconstruct standardized features; `model.encoder(x)` returns latent coordinates. The server does not accept uploaded checkpoints.
 
-#### Every neural control
+### Every neural control
 
 | Control / API key | Default | Allowed values / effect |
 | --- | --- | --- |
@@ -608,11 +608,11 @@ For classification, apply softmax to logits and map indices with `pre["classes"]
 | Latent dimensions / `latent_dim` | UI: `1`; API omitted: `2` | 1–32, strictly fewer than input features. Controls the autoencoder bottleneck. |
 | Error quantile / `anomaly_quantile` | `0.95` | 0.8–0.999 of training reconstruction errors; test errors above it are flagged. |
 
-#### Sequence example
+### Sequence example
 
 For one ordered series of 120 rows, validation/test fractions of 0.2 create 72 training, 24 validation and 24 test rows. A window length of 4 then gives 68, 20 and 20 prediction windows respectively. The first test window uses only the first four rows inside the test partition and predicts its fifth row. No training or validation context crosses into it. Preview sorting alone does not set sequence order.
 
-#### CNN collection structure
+### CNN collection structure
 
 ```text
 images.zip
@@ -627,7 +627,7 @@ images.zip
 
 Use the class directory names as labels. Do not include README files, nested category trees or unrelated files in the archive. Exact duplicates are removed after the 64×64 crop/resize, so the remaining class counts must still satisfy split requirements. Folder upload depends on the browser supporting directory selection; ZIP is the portable alternative.
 
-#### What happens during an epoch
+### What happens during an epoch
 
 Training batches are shuffled with a seeded generator, loss is calculated, gradients are backpropagated and clipped to norm 1, and the optimizer updates the weights. Classification uses cross-entropy; regression and reconstruction use mean squared error. Validation runs in evaluation mode without gradients. A lower validation loss saves a CPU state-dictionary checkpoint atomically, then the job record receives the new epoch history and progress message. Final test evaluation loads the best weights, not necessarily the last epoch's weights.
 
@@ -650,7 +650,7 @@ Training loss is averaged from minibatches while weights are changing and dropou
 | Regression | At most 20 predictors / 60 terms / 20 million design cells. Stepwise: at most 12 terms and 200 candidate fits. White auxiliary design: at most 10 million cells and more observations than auxiliary columns. |
 | ANOVA | 2–30 levels per factor; independent groups need at least two observations each. Two-way needs two observations per cell, at most 100 cells and 10 million design cells. Repeated measures needs at least three complete subjects. |
 | Plot size | At most 5,000 plotted rows; regression plots retain the 200 largest Cook’s distances. Pair plots: at most six numeric columns; distribution plots: at most 12. Shapiro and Anderson use a deterministic sample of at most 5,000 residuals. |
-| Reports | Latest 30 successful reports appear in the menu. Older reports remain available by their private job URLs; JSON includes parameters, tables, figures, warnings, and source revision. |
+| Reports | Latest 30 successful statistical reports, 30 ML/prediction jobs and 30 deep runs appear in their menus. Older reports remain available by their private job URLs; JSON includes parameters, tables, figures, warnings, and source revision. |
 | ML training | 8–50,000 rows overall; supervised models require at least 12 labeled rows and two held-out rows. SVR/SVM and UMAP: at most 10,000 rows; DBSCAN: 5,000; t-SNE: 3,000; hierarchical: 2,500. Encoded/polynomial designs: at most 2,000 features and 10 million cells. |
 | ML search | Supervised tasks only; at most 20,000 training rows, 20 candidates, 2–5 CV folds, and 1–10 listed values per searched parameter. Every estimator uses bounded key hyperparameters and a single estimator thread. |
 | ML plots / scoring | Predictions: at most 50,000 rows and 10 million encoded cells. Held-out plots: 2,000 points; embeddings: 3,000 points; cluster legends group beyond the 30 largest. Full results remain in CSV. |
@@ -772,19 +772,8 @@ Additional fixed settings include 2 MB non-file request data, 1 MB upload-memory
 
 Compose supplies service-internal database/Redis hostnames and shares media among web/workers. Its development database password is an example local credential. Changing `.env` does not override every value explicitly set by Compose; inspect [compose.yaml](compose.yaml) before deployment. Likewise, `project/local_settings.py` deliberately overrides database, broker, cache, cookie names and loopback settings for the launcher.
 
-- `project/`: settings, routing, and Celery configuration.
-- `workspace/ingestion.py`: validators, format parsers, protected URL fetching.
-- `workspace/cleaning.py`: deterministic cleaning operations.
-- `workspace/analytics/`: statistical computations and Plotly report generation inside the worker.
-- `workspace/ml/`: estimator catalog, validated preprocessing, supervised/search and unsupervised training, evaluation, and prediction.
-- `workspace/deep/`: PyTorch architectures, training-only preprocessing, safe image ingestion, epoch/checkpoint persistence, and private neural APIs.
-- `workspace/tasks.py`: worker orchestration and revision commits.
-- `workspace/api.py`: authenticated API, job submission, bounded preview, downloads.
-- `workspace/storage.py`: Parquet storage, profiles, and exports.
-- `templates/`, `assets/`, `static/`: frontend source and built assets.
-- Original notebooks, CSVs, and MySQL scripts are preserved as research material. They are not used by the web application and may need their own historical dependencies.
 
-### API
+## API
 
 All `/api/` routes require an authenticated Django session. JSON mutations require a CSRF header, while uploads use multipart bodies. Start from `/api/state/` to discover the current dataset/revision and owner-visible recent artifacts. State returns the latest 10 jobs, 30 successful statistical reports, 30 successful ML/prediction jobs, 30 successful deep runs and 20 successful image collections.
 
@@ -993,14 +982,14 @@ Open [the isolated test app](http://127.0.0.1:8787). It binds only to loopback a
 
 Phase 4 verification passed **66 automated tests**, exercised actual MLP/CNN jobs and epoch polling in the browser, and checked launcher setup and dependency consistency. Neural execution was verified on CPU. CUDA and Docker GPU passthrough require hardware/environment testing on the deployment target. This README-only update does not claim a new GPU validation.
 
-### Operations
+## Operations
 
 - Jobs stuck **queued**: start the worker and check that Django/worker share database, Redis, and media configuration.
 - Broker unavailable: submission reports the error and releases the workspace lock.
 - A forcibly killed worker can leave a **running** job. Confirm its worker has stopped, inspect the current dataset revision, then mark the interrupted job failed in Django admin before resubmitting. Never release a job while its worker may still be writing.
 - Deployment needs a WSGI/ASGI server, TLS, `DEBUG=False`, fresh credentials, shared private storage, reverse-proxy upload caps, retention, and process/container resource limits. Run Django's deployment checks with that configuration. [Django deployment checklist](https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/).
 
-#### Troubleshooting by symptom
+### Troubleshooting by symptom
 
 | Symptom | Likely cause / resolution |
 | --- | --- |
@@ -1024,7 +1013,7 @@ Phase 4 verification passed **66 automated tests**, exercised actual MLP/CNN job
 | Download unavailable | The job may not be ready, may belong to another user, or its private artifact may have been moved/deleted. Inspect the job and storage. |
 | Charts/styles look outdated | Rebuild frontend assets and reload the page. Restart the launcher after backend/template updates. |
 
-#### Back up and restore coherently
+### Back up and restore coherently
 
 For the local launcher, stop it cleanly before copying the complete `media/local/` directory. Back up the metadata SQLite database and its corresponding private dataset/artifact directory together. Keep `.env` separately and securely so the installation retains its intended settings. Recreating `venv/` from pinned requirements is preferable to treating the environment as the only backup.
 
@@ -1032,7 +1021,7 @@ For PostgreSQL/Compose, take a database backup and a consistent backup of the pr
 
 The application has no automatic file-retention scheduler or disk quota manager. Clear/replacement and undo-branch changes leave historical files behind. A deployment cleanup process must account for live jobs, revisions, uploads, reports and model/checkpoint relationships before removing files. Do not delete the whole media directory to recover a stuck job.
 
-#### Deployment readiness
+### Deployment readiness
 
 The supplied server commands and Compose stack are development entry points. A hosted deployment must provide a production WSGI/ASGI server, TLS termination, correct host/proxy configuration, secure credentials, shared private storage, ingress caps, backups and worker resource limits. Secure-cookie behavior depends on `DEBUG`; configure it deliberately. Run `python manage.py check --deploy` against actual deployment settings. Never expose the smoke server, test hashers or local memory-broker setup as a multi-user production service.
 
@@ -1062,7 +1051,7 @@ The supplied server commands and Compose stack are development entry points. A h
 
 ## Documentation media
 
-The README includes eight looping GIF walkthroughs and a gallery of genuine PNG captures under [docs/media](docs/media/). See [the media guide](docs/media/README.md) for each animation's exact frame order and capture notes. Each feature section includes a still image or a direct link to the source captures, so readers can inspect a static view when motion is distracting. Open any PNG at full size for small labels.
+The README includes eight feature walkthroughs plus an opening platform tour—nine looping GIFs—and a gallery of genuine PNG captures under [docs/media](docs/media/). See [the media guide](docs/media/README.md) for each animation's exact frame order and capture notes. Each feature section includes a still image or a direct link to the source captures, so readers can inspect a static view when motion is distracting. Open any PNG at full size for small labels.
 
 To rebuild the GIFs from the committed screenshot frames and refresh the parameter catalog:
 
