@@ -2,6 +2,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('studio', () => ({
     ...window.analysisControls(),
     ...window.modelingControls(),
+    ...window.deepControls(),
     dataset: null, loading: true, submitting: false, error: '', notice: '', job: null, tab: 'data',
     preview: {rows: [], page: 1, total: 0, pages: 1}, previewLoading: false, previewSequence: 0,
     page: 1, pageSize: 50, search: '', sort: '', direction: 'asc', filters: {}, showFilters: false,
@@ -46,7 +47,7 @@ document.addEventListener('alpine:init', () => {
     },
     async initStudio() {
       this.$watch('method', value => { if(this.action==='detect_outliers') this.outlierThreshold = value==='iqr'?1.5:value==='zscore'?3:.05; });
-      this.$watch('tab', value => this.$nextTick(()=>{if(['statistics','models'].includes(value))this.drawAnalysisCharts();if(value==='data')this.drawHeatmap();}));
+      this.$watch('tab', value => this.$nextTick(()=>{if(['statistics','models','deep'].includes(value))this.drawAnalysisCharts();if(value==='deep')this.drawDeepLive();if(value==='data')this.drawHeatmap();}));
       await this.refresh(true);
     },
     async refresh(resume=false) {
@@ -54,10 +55,11 @@ document.addEventListener('alpine:init', () => {
         const state = await this.api('state/'); this.dataset=state.dataset; this.maxUpload=state.max_upload_mb; this.importHosts=state.import_hosts;
         this.syncAnalysis(state);
         this.syncModels();
+        this.syncDeep(state);
         if (resume) {
           const active=state.jobs.find(j=>['queued','running'].includes(j.status));
-          if (active) { this.job=active; this.schedulePoll(); }
-          else if(state.jobs[0]?.status==='failed') this.error=state.jobs[0].message;
+          if (active) { this.job=active; this.updateDeepJob();this.schedulePoll(); }
+          else if(state.jobs[0]?.status==='failed') {this.error=state.jobs[0].message;this.job=state.jobs[0];this.updateDeepJob();}
           else if(state.jobs[0]?.result?.choose) this.showChoices(state.jobs[0].result);
           const download=state.jobs.find(j=>j.kind==='export' && j.result.download_url); if(download) this.downloadUrl=download.result.download_url;
         }
@@ -118,17 +120,18 @@ document.addEventListener('alpine:init', () => {
       try {const job=await this.api('jobs/',{method:'POST',body:JSON.stringify({kind,dataset_id:this.dataset.id,revision:this.dataset.revision,revision_id:this.dataset.revision_id,...extra})});await this.acceptJob(job);}
       catch(e){this.error=e.message;}finally{this.submitting=false;}
     },
-    async acceptJob(job) { this.job=job;if(['queued','running'].includes(job.status))this.schedulePoll();else await this.finishJob(); },
+    async acceptJob(job) { this.job=job;this.updateDeepJob();if(['queued','running'].includes(job.status))this.schedulePoll();else await this.finishJob(); },
     schedulePoll() { clearTimeout(this.pollTimer);this.pollTimer=setTimeout(()=>this.poll(),1000); },
     async poll() {
-      try {this.job=await this.api('jobs/'+this.job.id+'/');if(['queued','running'].includes(this.job.status))this.schedulePoll();else await this.finishJob();}
+      try {this.job=await this.api('jobs/'+this.job.id+'/');this.updateDeepJob();if(['queued','running'].includes(this.job.status))this.schedulePoll();else await this.finishJob();}
       catch(e){this.error=e.message;clearTimeout(this.pollTimer);this.pollTimer=setTimeout(()=>this.poll(),5000);}
     },
     async finishJob() {
       if(this.job.status==='failed'){this.error=this.job.message;return;}
       const result=this.job.result;
       if(result.choose) {this.showChoices(result);return;}
-      if(['analysis','model','predict'].includes(this.job.kind)){const id=this.job.id;await this.refresh();await this.loadReport(id);this.notice='Complete. Your report and outputs are saved.';return;}
+      if(this.job.kind==='image_ingest'){const id=this.job.id;await this.refresh();this.deepOptions.image_id=id;this.tab='deep';this.notice='Image collection validated. Select CNN settings to train.';return;}
+      if(['analysis','model','predict','deep'].includes(this.job.kind)){const id=this.job.id;await this.refresh();await this.loadReport(id);this.notice='Complete. Your report and outputs are saved.';return;}
       if(this.job.kind==='detect'){this.detection=this.job;await this.loadPreview();return;}
       if(this.job.kind==='export'){this.downloadUrl=result.download_url;this.notice='Your export is ready. Open Export data to download it again.';const a=document.createElement('a');a.href=this.downloadUrl;a.download='';a.click();return;}
       this.resetView();this.notice='Saved. Your workspace is up to date.';await this.refresh();

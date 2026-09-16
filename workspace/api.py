@@ -12,7 +12,7 @@ from rest_framework.views import APIView, exception_handler
 from .models import Job, Upload, Workspace
 from .ingestion import DataError, MIMES, ROW_ID, validate_file
 from .storage import private_path
-from .tasks import run_job
+from .tasks import run_job, run_deep_job
 
 
 def api_exception_handler(exc, context):
@@ -40,7 +40,8 @@ def submit(workspace, kind, payload):
     except IntegrityError:
         raise ValidationError('A workspace job is already running. Wait for it to finish.')
     try:
-        run_job.delay(str(job.id))
+        if kind in {'deep','image_ingest'}:run_deep_job.apply_async(args=[str(job.id)],queue='deep')
+        else:run_job.delay(str(job.id))
     except Exception:
         Job.objects.filter(pk=job.id, status='queued').update(
             status='failed', message='Cannot reach the job broker. Start Redis and the Celery worker, then retry.')
@@ -63,6 +64,8 @@ class State(APIView):
         return Response({'dataset': data, 'jobs': [serialize_job(job) for job in jobs],
                          'analyses': [serialize_job(job) for job in workspace.job_set.filter(kind='analysis', status='succeeded').order_by('-created_at')[:30]],
                          'models': [serialize_job(job) for job in workspace.job_set.filter(kind__in=['model','predict'], status='succeeded').order_by('-created_at')[:30]],
+                         'deep_runs': [serialize_job(job) for job in workspace.job_set.filter(kind='deep',status='succeeded').order_by('-created_at')[:30]],
+                         'image_sets': [serialize_job(job) for job in workspace.job_set.filter(kind='image_ingest',status='succeeded').order_by('-created_at')[:20]],
                          'max_upload_mb': settings.MAX_UPLOAD_BYTES // 1024**2,
                          'import_hosts': settings.IMPORT_URL_HOSTS})
 
@@ -146,7 +149,7 @@ class JobDetail(APIView):
 
 class Download(APIView):
     def get(self, request, job_id):
-        job = get_object_or_404(Job, pk=job_id, workspace__owner=request.user, status='succeeded', kind__in=['export', 'analysis', 'model', 'predict'])
+        job = get_object_or_404(Job, pk=job_id, workspace__owner=request.user, status='succeeded', kind__in=['export', 'analysis', 'model', 'predict','deep'])
         if not job.artifact or not Path(job.artifact).is_file():
             raise ValidationError('This export is no longer available. Create another export.')
         return FileResponse(open(job.artifact, 'rb'), as_attachment=True, filename=job.result['filename'])
@@ -154,7 +157,7 @@ class Download(APIView):
 
 class AnalysisReport(APIView):
     def get(self, request, job_id):
-        job = get_object_or_404(Job, pk=job_id, workspace__owner=request.user, status='succeeded', kind__in=['analysis','model','predict'])
+        job = get_object_or_404(Job, pk=job_id, workspace__owner=request.user, status='succeeded', kind__in=['analysis','model','predict','deep'])
         if not job.artifact or not Path(job.artifact).is_file():
             raise ValidationError('Report file is no longer available. Run the analysis again.')
         return FileResponse(open(job.artifact, 'rb'), content_type='application/json')

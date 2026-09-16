@@ -29,5 +29,5 @@ from celery.contrib.testing.worker import start_worker
 from project.celery import app
 
 print('UI test harness: http://127.0.0.1:8787 (isolated test database; register a test account)', flush=True)
-with start_worker(app, pool='solo', concurrency=1, perform_ping_check=False, loglevel='WARNING'):
+with start_worker(app, pool='solo', concurrency=1, queues=['celery','deep'], perform_ping_check=False, loglevel='WARNING'):
     run('127.0.0.1', 8787, StaticFilesHandler(get_wsgi_application()), threading=True)

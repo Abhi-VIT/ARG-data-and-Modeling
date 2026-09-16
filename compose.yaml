@@ -42,7 +42,15 @@ services:
   worker:
     build: .
     environment: *application_environment
-    command: ["celery", "-A", "project", "worker", "-l", "info", "--concurrency=2"]
+    command: ["celery", "-A", "project", "worker", "-l", "info", "-Q", "celery", "--concurrency=2"]
+    volumes: ["private_media:/app/media"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  deep-worker:
+    build: .
+    environment: *application_environment
+    command: ["celery", "-A", "project", "worker", "-l", "info", "-Q", "deep", "--pool=solo", "--concurrency=1"]
     volumes: ["private_media:/app/media"]
     depends_on:
       db: {condition: service_healthy}

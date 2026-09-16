@@ -39,7 +39,10 @@ def save_revision(dataset, frame, operation):
 
 def perform(job):
     payload = job.payload
-    if job.kind == 'predict':
+    if job.kind in {'deep','image_ingest'}:
+        from .deep.jobs import perform_deep
+        perform_deep(job)
+    elif job.kind == 'predict':
         perform_prediction(job)
     elif job.kind in {'ingest', 'url'}:
         progress(job, 15, 'Validating source')
@@ -226,3 +229,9 @@ def run_job(job_id):
         job.status = 'failed'
         job.message = 'Could not process this data. Check the format, parsing options, selected columns and values.'
     job.save(update_fields=['status', 'progress', 'message', 'result', 'artifact', 'updated_at'])
+
+
+@shared_task(queue='deep', soft_time_limit=1800, time_limit=1860)
+def run_deep_job(job_id):
+    # Separate queue permits a dedicated CUDA worker without blocking preparation jobs.
+    return run_job(job_id)

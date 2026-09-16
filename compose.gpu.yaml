@@ -1,0 +1,12 @@
+# Optional NVIDIA GPU access for the dedicated deep worker.
+# Requires NVIDIA Container Toolkit and a CUDA-enabled PyTorch installation.
+# docker compose -f compose.yaml -f compose.gpu.yaml up --build
+services:
+  deep-worker:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

@@ -1,6 +1,6 @@
 # ARG Data Studio
 
-A Django workspace for preparing, analyzing, and modeling data without writing Python. **Phases 1–3 are implemented:** ingestion, cleaning, export, statistics, classical machine learning, and interactive plots. Deep learning remains Phase 4.
+A Django workspace for preparing, analyzing, and modeling data without writing Python. **Phases 1–4 are implemented:** ingestion, cleaning, export, statistics, classical machine learning, PyTorch deep learning, and interactive plots.
 
 ## Implemented
 
@@ -13,6 +13,7 @@ A Django workspace for preparing, analyzing, and modeling data without writing P
 - Simple, multiple, and custom OLS regression with interactions/polynomials, stepwise selection, coefficient inference, fit statistics, residual tests, VIF, and five influence/diagnostic plots.
 - One-way, two-way, Welch, and repeated-measures ANOVA; Tukey HSD for ordinary independent-groups ANOVA; eight EDA plot types. Plotly charts support PNG downloads.
 - 28 classical ML estimators: regression, classification, clustering, and dimensionality reduction; configurable train/test splitting; training-only preprocessing; grid/random search; held-out metrics and permutation importance; a live binary classification cutoff; private model downloads and new-file prediction.
+- Configurable MLP/ANN, CNN, RNN, LSTM, GRU, and autoencoders; separate image ZIP/folder ingestion; train/validation/test splits; early stopping; live epoch curves; private PyTorch checkpoints and test-output CSVs. A dedicated Celery queue supports CUDA with CPU fallback.
 - Celery jobs for all ingestion, cleaning, detection, recipe replay, exports, and statistical analyses. The UI polls persistent job records and resumes polling after reload. Failed jobs preserve the active revision. Reports are private JSON artifacts tied to their original dataset revision.
 
 ## Local Setup
@@ -23,7 +24,7 @@ Double-click **`start.bat`** in the project folder. It uses the ignored `venv/`,
 
 Keep the launcher window open while working. Press **Ctrl+C** to stop. Opening `start.bat` again while it is running reopens the existing app. Startup failures remain visible in the console.
 
-After updating from an earlier phase, stop the running launcher and double-click `start.bat` again. It installs the newly required packages and loads the Statistics and Models tabs. Phase 3 adds XGBoost, LightGBM, UMAP, and joblib inside the ignored venv. UMAP's first run may take longer while its numerical kernels compile.
+After updating from an earlier phase, stop the running launcher and double-click `start.bat` again. It installs missing packages inside the ignored venv and loads all four phases. Phase 4 adds PyTorch and Pillow; the first installation is a larger download. The embedded worker consumes both ordinary and deep-learning jobs. Compatible CPU/CUDA build tags on the pinned PyTorch version are preserved. UMAP's first run may take longer while its numerical kernels compile.
 
 Your accounts, history, and datasets persist under **`media/local/`** (ignored by Git), separately from the earlier test preview on port 8787 and from the Docker database. Create an account on first use. This mode retains normal Django password hashing and uses a local SQLite database, an in-process Celery worker, and an in-memory broker/cache. Queued jobs are recovered on restart; interrupted running jobs are marked failed so you can inspect the saved revision before retrying. Rate-limit counters reset on restart and native Windows solo workers have no process-based time limits. Use the PostgreSQL/Redis setup below for hosted or multi-user operation.
 
@@ -80,7 +81,9 @@ python manage.py runserver
 In another activated terminal:
 
 ```bash
-celery -A project worker -l info --concurrency=2
+celery -A project worker -l info -Q celery --concurrency=2
+# Separate terminal for neural training and image validation:
+celery -A project worker -l info -Q deep --pool=solo --concurrency=1
 ```
 
 Use Linux, WSL2, or the Compose worker for normal Celery operation. Celery does not officially support native Windows. For a small **local check only**, a Windows worker can use `celery -A project worker -l info --pool=solo`; process-based task time limits do not apply in that mode. [Celery platform documentation](https://docs.celeryq.dev/en/stable/getting-started/introduction.html).
@@ -95,7 +98,7 @@ After creating `.env`:
 docker compose up --build
 ```
 
-This starts Django, a Linux Celery worker, PostgreSQL, and Redis. Web and worker share private media storage. The web service applies migrations before accepting requests. This development stack uses Django's development server.
+This starts Django, separate ordinary/deep Celery workers, PostgreSQL, and Redis. Web and workers share private media storage. The web service applies migrations before accepting requests. This development stack uses Django's development server. CUDA workers require compatible NVIDIA drivers, a CUDA-enabled PyTorch build, and GPU access; see Phase 4 below.
 
 ### Frontend development
 
@@ -118,6 +121,7 @@ Alpine manages selection, forms, and job polling; HTMX refreshes the server-rend
 6. **Export:** a worker prepares the current revision and starts its download. Reopen Export data to download again.
 7. **Statistics:** choose an analysis, explicitly check columns or **Select all applicable**, assign roles, then **Run analysis**. Numeric analyses list excluded nonnumeric columns. Reports retain their source revision; cleaning does not overwrite them. Use the saved-report menu to reopen recent results, download report JSON, or download individual charts as PNG.
 8. **Models:** choose a learning task and model, select a target for supervised tasks, and check features or **Select all except target**. Adjust the split, scaling, seed, and hyperparameters, then **Train model**. Saved model runs can be reopened from the report menu.
+9. **Deep learning:** choose an architecture, select numeric features and a target (or upload a CNN image collection), configure training, then **Train neural network**. The live panel shows epoch loss/accuracy and the best completed checkpoint. Saved runs retain their curves, metrics, and outputs.
 
 ### Phase 2 analysis guide
 
@@ -159,6 +163,43 @@ result.to_csv("predictions.csv", index=False)
 
 Recipes describe transformations, not fitted ML preprocessors: statistics, encodings, and scaler parameters are recomputed on the new dataset. Explicit cell/row selections replay the same positions. Target encoding uses the entire supplied dataset's target means; fit it only on training data to avoid leakage in later modeling.
 
+### Phase 4 deep-learning guide
+
+| Architecture | Input and output |
+| --- | --- |
+| MLP / ANN | Numeric tabular features; regression or 2–20-class classification |
+| CNN | A separate ZIP or folder containing `class_name/image.png` (optional common parent folder); image classification |
+| RNN / LSTM / GRU | One continuous sequence of numeric rows; a preceding window predicts the next row's numeric target or class |
+| Autoencoder | At least two numeric features; reconstruction error, anomaly flags, and a lower-dimensional latent representation |
+
+- **Configuration:** dense layer widths, ReLU/Tanh/GELU, Adam/SGD/RMSprop, learning rate, batch size, epochs, dropout, seed, split fractions, and optional early stopping with patience. Sequence networks add window length, recurrent layers/units, and optional order column. CNNs add convolution channels; autoencoders add latent dimensions and anomaly-error quantile. Recurrent cells retain PyTorch's supported internal activations; the selected activation also controls the dense head.
+- **Splits and preprocessing:** validation and test each reserve 10–30% of rows; the remainder trains the network. MLP/CNN/autoencoder splits are seeded; classification is stratified. Sequence splits are chronological, with windows overlapping only within each partition. An explicit order column must contain unique, nonmissing values; otherwise current dataset order is used. Do not combine independent subjects/series in one run. Missing sequence targets are rejected. Tabular features use medians/scales fitted only on training rows. Regression targets are standardized from training rows; final metrics return to original units. Encode categorical inputs before training, and avoid any full-dataset learned preprocessing that could leak holdout information.
+- **Validation and outputs:** validation loss selects the saved weights and triggers early stopping; the held-out test partition is evaluated afterward. Regression reports RMSE, MAE, R² and predictions; classification reports accuracy, precision, recall, F1, ROC-AUC and confusion matrix. Autoencoder error is measured in standardized feature space; anomaly flags use a quantile of training reconstruction error and are heuristic. All test outputs download as CSV, including original row numbers (CNN outputs also include the original image paths), probabilities or latent coordinates. Saved report JSON includes configuration, history and source metadata. Plotly figures export as PNG.
+- **Images:** validation and decoding run in the deep worker without extracting archives to disk. PNG/JPEG/WebP/BMP headers must match extensions. Images become center-cropped RGB 64×64 tensors. Exact duplicates after resizing are removed before splitting; conflicting labels are rejected. Use 12–2,000 images, 2–20 classes, and at least six distinct images per class. ZIPs reject traversal, symlinks, encryption, unexpected files, duplicate paths and excessive expansion. Folder uploads use the same checks and aggregate upload cap. Image collections remain separate from the active tabular dataset.
+- **Live progress and checkpoints:** epoch history and best validation weights persist after each completed epoch. Reload the page and reopen Deep learning to resume watching. A failed/interrupted run retains its last completed checkpoint. `.pt` checkpoints contain tensors, network configuration, training-only preprocessing, class mapping and source metadata; optimizer state is not saved, so these are inference checkpoints rather than resumable training sessions. The browser currently scores new uploaded files with classical models; neural checkpoints can be used from Python.
+- **CPU/CUDA:** Auto chooses CUDA if the worker can access it, otherwise CPU. CUDA required fails clearly when unavailable. Local validation used PyTorch 2.8.0+cpu; CUDA execution and Docker GPU passthrough have not been tested on this machine. To enable CUDA, install the compatible **2.8.0** wheel from [PyTorch's official installation commands](https://pytorch.org/get-started/previous-versions/#v280), verify `python -c "import torch; print(torch.cuda.is_available())"`, then restart the deep worker or `start.bat`. Hosted deployments can place the `deep` queue worker on a GPU host sharing the same database, Redis and private media. The default Compose setup does not request GPU access; with [NVIDIA Container Toolkit and GPU reservations configured](https://docs.docker.com/compose/how-tos/gpu-support/), use `docker compose -f compose.yaml -f compose.gpu.yaml up --build`.
+
+Example: use an exported MLP regression checkpoint in this project environment (the helper uses [PyTorch's `weights_only=True` loading](https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html)):
+
+```python
+import numpy as np
+import pandas as pd
+import torch
+from workspace.deep.networks import restore_checkpoint
+from workspace.deep.data import transform
+
+model, checkpoint = restore_checkpoint("best-checkpoint.pt")
+pre = checkpoint["preprocessing"]
+new = pd.read_csv("new-data.csv")
+values = new[pre["features"]].to_numpy(dtype=float)
+x = torch.from_numpy(transform(values, pre["scaler"]))
+with torch.no_grad():
+    standardized = model(x).numpy()[:, 0]
+predictions = standardized * pre["target_scaler"]["scale"] + pre["target_scaler"]["mean"]
+```
+
+For classification, apply softmax to logits and map indices with `pre["classes"]`. Sequence inputs have shape `[batch, window_length, features]`; CNN inputs have shape `[batch, 3, 64, 64]` scaled to `[0,1]`, using the same crop/resize process. Autoencoders reconstruct standardized features; `model.encoder(x)` returns latent coordinates. The server does not accept uploaded checkpoints.
+
 ## Limits and behavior
 
 | Setting / feature | Behavior |
@@ -182,6 +223,8 @@ Recipes describe transformations, not fitted ML preprocessors: statistics, encod
 | ML plots / scoring | Predictions: at most 50,000 rows and 10 million encoded cells. Held-out plots: 2,000 points; embeddings: 3,000 points; cluster legends group beyond the 30 largest. Full results remain in CSV. |
 | Rate limits | 20 upload requests/hour and 120 jobs/hour per user using Redis; one active job per workspace. DRF throttles are approximate under concurrency; add ingress limits when deploying. |
 | Time limits | Soft 300 / hard 330 seconds on supported Linux worker pools. Files must fit worker memory after expansion. |
+| Neural training | 20–20,000 tabular rows; 1–50 numeric features; 1–200 epochs; at most 2 million training sample visits, 10 million sequence input cells, and 2 million parameters. A 15-minute training-loop deadline preserves the best completed checkpoint. The deep task declares 30/31-minute soft/hard limits, which require a pool supporting them; the default solo deep worker needs deployment-level process/container limits. |
+| Image decoding | Aggregate upload limit applies; ZIP expansion ≤400 MB, each image ≤12 MB, ≤16 megapixels and ≤4,096 pixels per side; compression ratio ≤200. All images must fit worker memory. |
 | Spreadsheet exports | CSV/TSV/XLSX prefix formula-like text with an apostrophe. JSON/Parquet preserve text values. Excel datetime cells use UTC with timezone information removed because Excel cannot store it. |
 | Retention | Clear/replacement removes the active association, not the physical files. Old snapshots, sources, exports, and failed recipe intermediates stay private on disk. Automated retention/quotas are not implemented. |
 
@@ -207,6 +250,7 @@ Private disk: sources + Parquet snapshots + exports + reports
 - `workspace/cleaning.py`: deterministic cleaning operations.
 - `workspace/analytics/`: statistical computations and Plotly report generation inside the worker.
 - `workspace/ml/`: estimator catalog, validated preprocessing, supervised/search and unsupervised training, evaluation, and prediction.
+- `workspace/deep/`: PyTorch architectures, training-only preprocessing, safe image ingestion, epoch/checkpoint persistence, and private neural APIs.
 - `workspace/tasks.py`: worker orchestration and revision commits.
 - `workspace/api.py`: authenticated API, job submission, bounded preview, downloads.
 - `workspace/storage.py`: Parquet storage, profiles, and exports.
@@ -229,6 +273,10 @@ Private disk: sources + Parquet snapshots + exports + reports
 | `GET /api/models/<id>/download/` | Owner-only trained `.pkl` bundle |
 | `GET /api/models/<id>/output/` | Complete cluster assignments, embedding, or prediction CSV |
 | `POST /api/models/<id>/predict/` | Multipart `file`, optional parsing `options` JSON and binary `threshold`; returns a queued prediction job without replacing the dataset |
+| `POST /api/deep/images/` | Multipart `archive` ZIP, or `images` files plus `paths` JSON array; queues image validation |
+| `POST /api/deep/train/` | `deep` configuration and current `dataset_id`/`revision_id`; CNN instead requires `deep.image_id` from a validated collection |
+| `GET /api/deep/<id>/checkpoint/` | Owner-only best `.pt` checkpoint; available after first completed epoch, including interrupted runs |
+| `GET /api/deep/<id>/output/` | Owner-only completed neural test outputs as CSV |
 | `GET /api/recipe/` | Applied recipe as JSON |
 
 ## Validation
@@ -241,10 +289,11 @@ pip check
 node --check static/js/workspace.js
 node --check static/js/analysis.js
 node --check static/js/modeling.js
+node --check static/js/deep.js
 npm run build
 ```
 
-The 55 automated tests use temporary media and isolated SQLite. They cover parsers, rejected SQL/XML/URL inputs, selection, drop/undo/replay, cleaning, atomic recipes, exports, CSRF, ownership, broker failures, throttles, and previews. Statistical tests compare results with SciPy/statsmodels/Pingouin and exercise all analysis/plot families. ML tests fit and serialize all 28 estimators, check training-only and fold-local preprocessing, held-out metric calculations, grid/random search, cutoff counts, new categories, artifact ownership, prediction uploads, and asynchronous enqueueing.
+The 66 automated tests use temporary media and isolated SQLite. They cover parsers, rejected SQL/XML/URL inputs, selection, drop/undo/replay, cleaning, atomic recipes, exports, CSRF, ownership, broker failures, throttles, and previews. Statistical tests compare results with SciPy/statsmodels/Pingouin and exercise all analysis/plot families. ML tests fit and serialize all 28 estimators, check training-only and fold-local preprocessing, held-out metric calculations, grid/random search, cutoff counts, new categories, artifact ownership, prediction uploads, and asynchronous enqueueing. Deep tests train all six architectures, restore best checkpoints and compare outputs, exercise all optimizers/activations, verify chronological window boundaries and training-only scalers, test early stopping/interrupted checkpoints, validate image archives/folders, and check dedicated queue routing and ownership. CPU training is tested; CUDA hardware is unavailable here.
 
 The optional browser-test harness uses a **real Celery worker** with an in-memory broker and isolated SQLite files:
 
@@ -266,6 +315,6 @@ Open [the isolated test app](http://127.0.0.1:8787). It binds only to loopback a
 1. **Delivered:** ingestion, preview, cleaning, export, authentication, background jobs, setup.
 2. **Delivered:** column-selected statistics, correlation, regression diagnostics, ANOVA, diagnostic and EDA plots, persistent reports.
 3. **Delivered:** classical ML, grid/random tuning, held-out evaluation, clustering/reduction, model downloads, prediction.
-4. **Later:** PyTorch architectures, GPU worker queue, training progress, checkpoints.
+4. **Delivered:** six PyTorch architectures, separate image uploads, CUDA-capable worker queue with CPU fallback, live epoch progress, early stopping, held-out evaluation, and checkpoints.
 
-`requirements-later-phases.txt` pins the optional PyTorch dependency for Phase 4. Deep-learning features have not been implemented or validated.
+`requirements-later-phases.txt` is a compatibility entry point that includes the complete `requirements.txt`.

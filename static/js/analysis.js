@@ -21,7 +21,7 @@ window.analysisControls = () => ({
   selectAnalysisAll() {this.analysisColumns=this.columns.filter(c=>!this.numericAnalysis() || this.analysisNumeric(c)).map(c=>c.name);},
   toggleAnalysisColumn(name) {this.analysisColumns=this.analysisColumns.includes(name)?this.analysisColumns.filter(c=>c!==name):[...this.analysisColumns,name];},
   syncAnalysis(state) {
-    this.recentReports=[...(state.analyses || []),...(state.models || [])].sort((a,b)=>b.created_at.localeCompare(a.created_at));
+    this.recentReports=[...(state.analyses || []),...(state.models || []),...(state.deep_runs||[])].sort((a,b)=>b.created_at.localeCompare(a.created_at));
     const valid=this.columns.map(c=>c.name);
     this.analysisColumns=this.analysisColumns.filter(c=>valid.includes(c));
     this.polynomialColumns=this.polynomialColumns.filter(c=>valid.includes(c));
@@ -31,14 +31,14 @@ window.analysisControls = () => ({
   },
   showStatistics() {
     this.tab='statistics';
-    if(this.report && ['ml','prediction'].includes(this.report.analysis_type)){this.report=null;this.reportId='';}
+    if(this.report && ['ml','prediction','deep'].includes(this.report.analysis_type)){this.report=null;this.reportId='';}
     if(!this.analysisColumns.length && this.selectedColumns.length)this.analysisColumns=[...this.selectedColumns];
     if(!this.report) {
       const latest=this.recentReports.find(j=>j.kind==='analysis' && j.result.dataset_id===this.dataset?.id);
       if(latest)this.loadReport(latest.id);
     } else this.$nextTick(()=>this.drawAnalysisCharts());
   },
-  visibleReports(){return this.recentReports.filter(j=>this.tab==='models'?['model','predict'].includes(j.kind):j.kind==='analysis');},
+  visibleReports(){return this.recentReports.filter(j=>this.tab==='deep'?j.kind==='deep':this.tab==='models'?['model','predict'].includes(j.kind):j.kind==='analysis');},
   correlationSuggestion() {
     const columns=this.analysisSelected();
     if(columns.length!==2)return 'Auto chooses a method for each pair using observed types and levels. You can override it below.';
@@ -93,7 +93,7 @@ window.analysisControls = () => ({
     try {
       const result=await this.api('jobs/'+id+'/report/');
       if(seq!==this.reportSequence)return;
-      this.report=result;this.reportId=id;this.reportTablePages={};this.tab=['ml','prediction'].includes(result.analysis_type)?'models':'statistics';this.thresholdIndex=50;
+      this.report=result;this.reportId=id;this.reportTablePages={};this.tab=result.analysis_type==='deep'?'deep':['ml','prediction'].includes(result.analysis_type)?'models':'statistics';this.thresholdIndex=50;
       if(this.tab==='models' && !this.modelCatalog.length)this.loadModelCatalog();
       this.$nextTick(()=>this.drawAnalysisCharts());
     } catch(e){this.error=e.message;}
@@ -112,7 +112,7 @@ window.analysisControls = () => ({
   reportRows(index) {const start=(this.reportPage(index)-1)*30;return this.report.tables[index].rows.slice(start,start+30);},
   changeReportPage(index,delta) {this.reportTablePages={...this.reportTablePages,[index]:Math.max(1,Math.min(Math.ceil(this.report.tables[index].rows.length/30),this.reportPage(index)+delta))};},
   drawAnalysisCharts() {
-    if(!this.report || !['statistics','models'].includes(this.tab) || !window.Plotly)return;
+    if(!this.report || !['statistics','models','deep'].includes(this.tab) || !window.Plotly)return;
     this.report.figures.forEach((plot,index)=>{
       const element=document.getElementById('analysis-chart-'+index);
       if(element) {

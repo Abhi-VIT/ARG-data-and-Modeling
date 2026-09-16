@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% load static %}
-{% block scripts %}<script defer src="{% static 'vendor/plotly.min.js' %}"></script><script defer src="{% static 'js/analysis.js' %}"></script><script defer src="{% static 'js/modeling.js' %}"></script><script defer src="{% static 'js/workspace.js' %}"></script>{% endblock %}
+{% block scripts %}<script defer src="{% static 'vendor/plotly.min.js' %}"></script><script defer src="{% static 'js/analysis.js' %}"></script><script defer src="{% static 'js/modeling.js' %}"></script><script defer src="{% static 'js/deep.js' %}"></script><script defer src="{% static 'js/workspace.js' %}"></script>{% endblock %}
 {% block body %}
 <div x-data="studio" x-init="initStudio" class="min-h-screen lg:pl-56">
   <aside class="lg:fixed lg:inset-y-0 lg:left-0 lg:w-56 bg-white border-r border-slate-200 flex lg:flex-col p-5 z-20">
@@ -9,8 +9,8 @@
       <button @click="tab='data'" class="nav-item" :class="{'active':tab==='data'}"><span>▦</span> Data explorer</button>
       <button @click="tab='history'" class="nav-item" :class="{'active':tab==='history'}"><span>↺</span> Operation history <span class="ml-auto text-xs" x-text="dataset?.revision || 0"></span></button>
       <button @click="showStatistics" class="nav-item" :class="{'active':tab==='statistics'}" :disabled="!dataset"><span>◷</span> Statistics <span class="ml-auto text-[9px]">02</span></button>
-      <button @click="showModels" class="nav-item" :class="{active:tab==='models'}" :disabled="!dataset"><span>◇</span> Machine learning <span class="ml-auto text-[9px]">03</span></button><p class="eyebrow px-3 mt-9 mb-3">Coming in later phases</p>
-      <div class="nav-item opacity-50">⌘ &nbsp; Deep learning <span class="ml-auto text-[9px]">04</span></div>
+      <button @click="showModels" class="nav-item" :class="{active:tab==='models'}" :disabled="!dataset"><span>◇</span> Machine learning <span class="ml-auto text-[9px]">03</span></button>
+      <button @click="showDeep" class="nav-item" :class="{active:tab==='deep'}">⌘ &nbsp; Deep learning <span class="ml-auto text-[9px]">04</span></button>
     </div>
     <div class="mt-auto hidden lg:block"><div class="rounded-lg bg-paper p-3 mb-5"><p class="text-xs font-semibold text-pine">A little clarity goes a long way.</p><p class="text-[11px] leading-relaxed text-slate-500 mt-2">Every cleaning step is saved. Explore freely, and undo whenever you need.</p></div>
       <div class="border-t border-slate-100 pt-4 flex items-center gap-2"><span class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold">{{ user.username|first|upper }}</span><div class="min-w-0"><p class="text-xs font-semibold truncate">{{ user.username }}</p><p class="text-[10px] text-slate-400">Personal workspace</p></div></div>
@@ -18,25 +18,26 @@
     </div>
   </aside>
   <header class="h-16 px-5 lg:px-8 border-b border-slate-200 bg-white/80 flex items-center justify-between">
-    <div class="text-xs text-slate-400">Workspace <span class="mx-3">/</span><span class="text-slate-700" x-text="tab==='models'?'Machine learning':tab==='statistics'?'Statistics & diagnostics':'Data preparation'"></span></div>
-    <div class="flex items-center gap-3"><span class="text-[10px] tracking-wider text-slate-400 uppercase hidden sm:block" x-text="tab==='models'?'Phase 03':tab==='statistics'?'Phase 02':'Phase 01'"></span><div hx-get="{% url 'workspace-status' %}" hx-trigger="load, every 60s" hx-swap="innerHTML">{% include 'workspace/status.html' %}</div></div>
+    <div class="text-xs text-slate-400">Workspace <span class="mx-3">/</span><span class="text-slate-700" x-text="tab==='deep'?'Deep learning':tab==='models'?'Machine learning':tab==='statistics'?'Statistics & diagnostics':'Data preparation'"></span></div>
+    <div class="flex items-center gap-3"><span class="text-[10px] tracking-wider text-slate-400 uppercase hidden sm:block" x-text="tab==='deep'?'Phase 04':tab==='models'?'Phase 03':tab==='statistics'?'Phase 02':'Phase 01'"></span><div hx-get="{% url 'workspace-status' %}" hx-trigger="load, every 60s" hx-swap="innerHTML">{% include 'workspace/status.html' %}</div></div>
   </header>
   <main class="max-w-[1800px] mx-auto px-4 py-6 lg:px-8 lg:py-8">
     <div class="flex flex-wrap justify-between gap-4 items-start mb-7"><div><p class="eyebrow mb-2">Prepare with confidence</p><h1 class="text-3xl font-semibold tracking-tight">Your data, a little clearer.</h1><p class="text-sm text-slate-500 mt-2">Import, explore, and shape your next discovery.</p></div>
-      <div class="flex gap-2"><button class="btn" @click="exportOpen=true" :disabled="!dataset || busy">↓ &nbsp; Export data</button><button class="btn-primary" @click="openImport" :disabled="busy">＋ &nbsp; Import dataset</button></div>
+      <div class="flex flex-wrap gap-2"><button class="btn" @click="showDeep">⌘ Deep learning</button><button class="btn" @click="exportOpen=true" :disabled="!dataset || busy">↓ &nbsp; Export data</button><button class="btn-primary" @click="openImport" :disabled="busy">＋ &nbsp; Import dataset</button></div>
     </div>
     <div x-show="error" x-cloak role="alert" class="rounded-lg border border-red-200 bg-red-50 p-3 mb-4 text-sm text-red-800 flex justify-between gap-4"><span x-text="error"></span><button aria-label="Dismiss error" @click="error=''">×</button></div>
     <div x-show="notice" x-cloak role="status" class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 mb-4 text-sm text-pine flex justify-between gap-4"><span x-text="notice"></span><button aria-label="Dismiss notification" @click="notice=''">×</button></div>
     <div x-show="busy" x-cloak class="card p-4 mb-5" role="status" aria-live="polite"><div class="flex justify-between mb-2 text-xs"><span x-text="job?.message || 'Submitting job…'"></span><span x-text="(job?.progress || 0)+'%'"></span></div><div class="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-pine transition-all" :style="'width:'+Math.max(3,job?.progress || 0)+'%'"></div></div><p class="text-[11px] text-slate-400 mt-2" x-show="job?.status==='queued'">Waiting for the background worker. You can leave this page and return.</p></div>
     <div x-show="loading" class="grid gap-4"><div class="skeleton h-24"></div><div class="skeleton h-80"></div></div>
-    <section x-show="!loading && !dataset" x-cloak class="card px-6 py-16 text-center">
+    <section x-show="!loading && !dataset && tab!=='deep'" x-cloak class="card px-6 py-16 text-center">
       <div class="mx-auto h-16 w-16 rounded-2xl bg-emerald-50 text-pine flex items-center justify-center text-3xl mb-6">▦</div>
       <p class="eyebrow mb-3">A fresh workspace</p><h2 class="text-2xl font-semibold tracking-tight">Every dataset has a story.</h2><p class="text-sm text-slate-500 max-w-md mx-auto mt-3 leading-relaxed">Bring yours in. Find the gaps, clean the details, and leave with data that’s ready for what comes next.</p>
       <div class="flex justify-center gap-3 mt-7"><button class="btn-primary" @click="openImport" :disabled="busy">Import your first dataset →</button><button class="btn" @click="loadSample" :disabled="busy">Try sample data</button></div>
       <p class="mt-8 text-[11px] text-slate-400">CSV · TSV · JSON · Excel · Parquet · XML · SQL · SQLite · URL</p>
       <div class="grid sm:grid-cols-3 gap-6 text-left max-w-3xl mx-auto mt-16 border-t pt-8"><div><span class="eyebrow">01 / Bring it in</span><p class="text-sm font-medium mt-2">One place for your dataset</p><p class="text-xs text-slate-400 mt-2">Flexible parsing, private storage.</p></div><div><span class="eyebrow">02 / Make it useful</span><p class="text-sm font-medium mt-2">See what needs attention</p><p class="text-xs text-slate-400 mt-2">Explore columns and clean selected values.</p></div><div><span class="eyebrow">03 / Take it forward</span><p class="text-sm font-medium mt-2">A repeatable workflow</p><p class="text-xs text-slate-400 mt-2">Export your data and reusable recipe.</p></div></div>
     </section>
-    <template x-if="dataset && !loading"><div>
+    {% include 'workspace/deep.html' %}
+    <template x-if="dataset && !loading && tab!=='deep'"><div>
       <div class="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <div class="card p-4"><p class="eyebrow">Total rows <span class="float-right text-base">≡</span></p><p class="text-2xl font-semibold mt-3" x-text="fmt(dataset.profile.rows)"></p><p class="text-[11px] text-slate-400 mt-1">Observations in your dataset</p></div>
         <div class="card p-4"><p class="eyebrow">Columns <span class="float-right text-base">▥</span></p><p class="text-2xl font-semibold mt-3" x-text="dataset.profile.column_count"></p><p class="text-[11px] text-slate-400 mt-1 truncate" x-text="Object.entries(dataset.profile.dtypes).map(([k,v])=>v+' '+k).join(' · ')"></p></div>
@@ -44,7 +45,7 @@
         <div class="card p-4"><p class="eyebrow">Duplicate rows <span class="float-right text-base">▱</span></p><p class="text-2xl font-semibold mt-3" x-text="fmt(dataset.profile.duplicates)"></p><p class="text-[11px] text-slate-400 mt-1" x-text="(dataset.profile.memory_bytes/1024/1024).toFixed(2)+' MB in memory'"></p></div>
       </div>
       <div class="flex gap-5 mb-4 border-b border-slate-200 text-sm"><button @click="tab='data'" class="pb-3" :class="tab==='data'?'border-b-2 border-pine text-pine font-semibold':'text-slate-400'">▦ &nbsp; Data explorer</button><button @click="showStatistics" class="pb-3" :class="tab==='statistics'?'border-b-2 border-pine text-pine font-semibold':'text-slate-400'">◷ &nbsp; Statistics</button><button @click="showModels" class="pb-3" :class="tab==='models'?'border-b-2 border-pine text-pine font-semibold':'text-slate-400'">◇ &nbsp; Models</button><button @click="tab='history'" class="pb-3" :class="tab==='history'?'border-b-2 border-pine text-pine font-semibold':'text-slate-400'">↺ &nbsp; History <span class="ml-1 chip" x-text="dataset.revision"></span></button></div>
-      {% include 'workspace/statistics.html' %}
+      <template x-if="['statistics','models'].includes(tab)">{% include 'workspace/statistics.html' %}</template>
       <div x-show="tab==='data'" class="grid xl:grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
         <section class="card min-w-0 overflow-hidden">
           <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3"><div class="min-w-0"><h2 class="font-semibold text-sm truncate" x-text="dataset.name"></h2><p class="text-[11px] text-slate-400 mt-1">Revision <span x-text="dataset.revision"></span> · Changes are saved automatically</p></div><div class="flex gap-1"><button class="btn !px-2.5" title="Undo last operation" @click="submitJob('undo')" :disabled="busy || !dataset.can_undo">↶</button><button class="btn !px-2.5" title="Redo operation" @click="submitJob('redo')" :disabled="busy || !dataset.can_redo">↷</button></div></div>

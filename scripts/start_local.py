@@ -32,7 +32,8 @@ def ensure_environment():
             installed = metadata.version(name)
         except metadata.PackageNotFoundError:
             installed = None
-        if installed != version:
+        # PyTorch CPU/CUDA wheels append a local build tag to the pinned release.
+        if (installed.split('+')[0] if name == 'torch' and installed else installed) != version:
             missing.append(line)
     if missing:
         print('Installing required dependencies into venv (internet needed on first setup)...', flush=True)
@@ -103,7 +104,7 @@ def serve(port, browser_enabled):
     from django.utils import timezone
     from project.celery import app
     from workspace.models import Job
-    from workspace.tasks import run_job
+    from workspace.tasks import run_job, run_deep_job
 
     # Bind before changing any job state. Never open another application's occupied port.
     try:
@@ -126,6 +127,7 @@ def serve(port, browser_enabled):
         app.set_current()
         app.set_default()
         worker = WorkController(app=app, pool='solo', concurrency=1, hostname='arg-local@localhost',
+                                queues=['celery','deep'],
                                 ready_callback=lambda consumer: ready.set(),
                                 without_heartbeat=True, without_mingle=True, without_gossip=True)
         worker_thread = threading.Thread(target=worker.start, name='arg-worker', daemon=True)
@@ -136,8 +138,9 @@ def serve(port, browser_enabled):
                 raise RuntimeError('The background worker did not start. See the console output above.')
 
         # Queued jobs are durable in SQLite even though the local broker is in memory.
-        for job_id in Job.objects.filter(status='queued').values_list('id', flat=True):
-            run_job.delay(str(job_id))
+        for job_id,kind in Job.objects.filter(status='queued').values_list('id','kind'):
+            if kind in {'deep','image_ingest'}:run_deep_job.apply_async(args=[str(job_id)],queue='deep')
+            else:run_job.delay(str(job_id))
 
         application = StaticFilesHandler(get_wsgi_application())
 
